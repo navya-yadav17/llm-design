@@ -79,11 +79,11 @@ structured diagnostic response (no persistence in this step)
 
 ## Next steps
 
-1. Validate parser behavior against representative logs from the target services.
-2. Add provider-specific configuration, timeouts/retries, and evaluation fixtures.
-3. Add authenticated ingestion, rate limits, auditability, and an explicit retention policy before operational deployment.
-4. Connect alerting/ticketing workflows only after diagnosis quality and privacy boundaries are validated.
-5. Add deployment manifests and observability after selecting a hosting target.
+1. Validate parsing on real service logs.
+2. Add authenticated ingestion, rate limits, and retention controls.
+3. Improve trace stitching and root-cause evaluation.
+4. Add alerting/ticket integrations and measure MTTD/MTTR.
+5. Deploy to the chosen cloud and monitor it.
 
 ## Operational success measures
 
