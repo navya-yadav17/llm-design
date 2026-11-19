@@ -20,3 +20,17 @@ def test_ignores_blank_lines() -> None:
 
     assert parsed.lines == [" INFO started "]
     assert parsed.levels == ["INFO"]
+
+
+def test_stitches_json_correlation_ids_to_following_stack_frames() -> None:
+    parsed = parse_logs(
+        '{"timestamp":"2026-10-24T10:30:00Z","level":"ERROR","request_id":"req-1","message":"failed"}\n'
+        '  File "service.py", line 42, in handle\n'
+        '{"trace_id":"trace-2","level":"WARN","message":"retrying"}'
+    )
+
+    assert parsed.correlation_ids == ["req-1", "trace-2"]
+    assert [(trace.correlation_id, trace.line_numbers) for trace in parsed.trace_groups] == [
+        ("req-1", [1, 2]),
+        ("trace-2", [3]),
+    ]

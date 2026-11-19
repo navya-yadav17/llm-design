@@ -20,24 +20,31 @@ Requires Python 3.11 or newer.
 
 ```powershell
 py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
-uvicorn ops_diagnostics.main:app --reload --app-dir src
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-local.ps1
 ```
 
-Check `http://127.0.0.1:8000/health` or submit logs:
+The local runner uses `.venv` when present, generates a random API key if `DIAGNOSTICS_API_KEY` is not set, and prints a generated key once for API requests. It binds to `127.0.0.1` and does not persist the generated key. To use your own key, set `DIAGNOSTICS_API_KEY` in the current PowerShell session before running it. To change the port, add `-Port 8080`. The execution-policy bypass applies only to this PowerShell process.
+
+Check `http://127.0.0.1:8000/health` or submit logs from another PowerShell window. Copy the key printed by the runner into `$env:DIAGNOSTICS_API_KEY` before submitting a request:
+
+```powershell
+$env:DIAGNOSTICS_API_KEY = "paste-the-key-printed-by-run-local"
+```
 
 ```powershell
 $body = @{ logs = "2026-10-24T10:30:00Z ERROR request_id=req-123 failure`n  at app.handler(service.py:42)" } | ConvertTo-Json
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/v1/diagnostics/analyze -ContentType "application/json" -Body $body
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/v1/diagnostics/analyze -Headers @{ Authorization = "Bearer $env:DIAGNOSTICS_API_KEY" } -ContentType "application/json" -Body $body
 ```
 
-To enable model-assisted analysis, copy `.env.example` to `.env` and set `DIAGNOSTICS_LLM_ENABLED=true`, `DIAGNOSTICS_LLM_BASE_URL`, and `DIAGNOSTICS_LLM_MODEL`. `DIAGNOSTICS_LLM_API_KEY` is optional for local gateways. Environment variables must be loaded into the process by the operator; the service does not load `.env` files automatically. Only use a provider approved for your log data. Redaction is best-effort and must not be treated as a guarantee that logs contain no sensitive data.
+The analysis endpoint requires `DIAGNOSTICS_API_KEY`; it fails closed with `503` if the key is not configured and returns `401` for missing or incorrect bearer tokens. Requests are limited per client IP using `DIAGNOSTICS_RATE_LIMIT` and `DIAGNOSTICS_RATE_WINDOW_SECONDS` (defaults: 60 requests per 60 seconds). The rate limiter is process-local, so it is not shared across workers or replicas and is not a substitute for an edge/API gateway limit. `/health` remains public and is not rate-limited. Responses include correlation-ID trace groups with 1-based line numbers into the non-empty input lines; raw log lines are not returned.
+
+To enable model-assisted analysis, set `DIAGNOSTICS_LLM_ENABLED=true`, `DIAGNOSTICS_LLM_BASE_URL`, and `DIAGNOSTICS_LLM_MODEL`. `DIAGNOSTICS_LLM_API_KEY` is optional for local gateways. Environment variables must be loaded into the process by the operator; the service does not load `.env` files automatically. Only use a provider approved for your log data. Redaction is best-effort and must not be treated as a guarantee that logs contain no sensitive data.
 
 ## Test
 
 ```powershell
-python -m pytest
+.\.venv\Scripts\python.exe -m pytest
 ```
 
 ## Target architecture
@@ -61,7 +68,7 @@ diagnostic API -> alert/ticket/chat integrations -> operator feedback
 redacted, retention-controlled telemetry for quality and MTTD/MTTR measurement
 ```
 
-The ingestion, storage, and workflow integrations are future phases, not part of this local prototype. The intended diagnosis should distinguish observed evidence from hypotheses, include confidence and verification steps, and never trigger automatic remediation in the initial releases.
+Authentication and process-local request limits protect the analysis endpoint. The service still does not persist logs, so retention controls are not applicable yet; persistent storage, auditability, distributed rate limiting, and workflow integrations require a deployment-specific design. The intended diagnosis should distinguish observed evidence from hypotheses, include confidence and verification steps, and never trigger automatic remediation in the initial releases.
 
 ## Initial architecture
 
@@ -79,11 +86,11 @@ structured diagnostic response (no persistence in this step)
 
 ## Next steps
 
-1. Validate parsing on real service logs.
-2. Add authenticated ingestion, rate limits, and retention controls.
-3. Improve trace stitching and root-cause evaluation.
+1. Validate parsing against representative logs from the target services and broaden the root-cause evaluation set.
+2. Expand trace stitching across events and sources after defining the ingestion format.
+3. Add persistence only with a defined retention, audit, and privacy policy.
 4. Add alerting/ticket integrations and measure MTTD/MTTR.
-5. Deploy to the chosen cloud and monitor it.
+5. Select a cloud and deploy behind production-grade authentication and rate limiting.
 
 ## Operational success measures
 
